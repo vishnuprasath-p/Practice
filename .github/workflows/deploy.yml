@@ -4,14 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Docker image tag to deploy'
+        description: 'Docker image tag (commit SHA) to deploy'
         required: true
-        default: 'latest'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -20,18 +22,17 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             if command -v kubectl &> /dev/null; then
-              # Check if deployment exists
-              if kubectl get deployment simple-ui-app &> /dev/null; then
-                echo "Deployment exists, updating image..."
-                kubectl set image deployment/simple-ui-app \
-                  simple-ui-app=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.event.inputs.image_tag }}
-                kubectl rollout status deployment/simple-ui-app
-              else
-                echo "Deployment does not exist. Creating deployment..."
-                kubectl create deployment simple-ui-app --image=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.event.inputs.image_tag }}
-                kubectl expose deployment simple-ui-app --port=80 --target-port=3000 --type=LoadBalancer
-                echo "Deployment created successfully"
-              fi
+              cd /home/${{ secrets.VM_USER }}/Practice
+              git pull origin main
+              
+              # Replace placeholders in deployment manifest
+              sed -i 's|DOCKER_USERNAME|${{ secrets.DOCKER_USERNAME }}|g' k8s/deployment.yml
+              sed -i 's|BUILD_COMMIT_ID|${{ github.event.inputs.image_tag }}|g' k8s/deployment.yml
+              
+              # Apply deployment
+              kubectl apply -f k8s/deployment.yml
+              kubectl rollout status deployment/simple-ui-app --timeout=5m
+              echo "Deployment successful with image tag: ${{ github.event.inputs.image_tag }}"
             else
               echo "kubectl not found on the VM"
               exit 1
