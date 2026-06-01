@@ -14,6 +14,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Extract last 5 digits of commit SHA
+        id: short_sha
+        run: echo "sha_short=$(echo ${{ github.event.inputs.image_tag }} | tail -c 6)" >> $GITHUB_OUTPUT
+
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -27,12 +31,12 @@ jobs:
               
               # Replace placeholders in deployment manifest
               sed -i 's|DOCKER_USERNAME|${{ secrets.DOCKER_USERNAME }}|g' k8s/deployment.yml
-              sed -i 's|BUILD_COMMIT_ID|${{ github.event.inputs.image_tag }}|g' k8s/deployment.yml
+              sed -i 's|BUILD_COMMIT_ID|${{ steps.short_sha.outputs.sha_short }}|g' k8s/deployment.yml
               
               # Apply deployment
               kubectl apply -f k8s/deployment.yml
               kubectl rollout status deployment/simple-ui-app --timeout=5m
-              echo "Deployment successful with image tag: ${{ github.event.inputs.image_tag }}"
+              echo "Deployment successful with image tag: ${{ steps.short_sha.outputs.sha_short }}"
             else
               echo "kubectl not found on the VM"
               exit 1
