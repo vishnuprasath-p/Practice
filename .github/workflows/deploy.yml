@@ -20,9 +20,18 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             if command -v kubectl &> /dev/null; then
-              kubectl set image deployment/simple-ui-app \
-                simple-ui-app=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.event.inputs.image_tag }}
-              kubectl rollout status deployment/simple-ui-app
+              # Check if deployment exists
+              if kubectl get deployment simple-ui-app &> /dev/null; then
+                echo "Deployment exists, updating image..."
+                kubectl set image deployment/simple-ui-app \
+                  simple-ui-app=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.event.inputs.image_tag }}
+                kubectl rollout status deployment/simple-ui-app
+              else
+                echo "Deployment does not exist. Creating deployment..."
+                kubectl create deployment simple-ui-app --image=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.event.inputs.image_tag }}
+                kubectl expose deployment simple-ui-app --port=80 --target-port=3000 --type=LoadBalancer
+                echo "Deployment created successfully"
+              fi
             else
               echo "kubectl not found on the VM"
               exit 1
