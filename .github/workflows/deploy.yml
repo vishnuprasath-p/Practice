@@ -17,11 +17,19 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
+            mkdir -p /home/${{ secrets.VM_USER }}/Practice
             cd /home/${{ secrets.VM_USER }}/Practice
+            if [ ! -d .git ]; then
+              git clone https://github.com/${{ github.repository }}.git .
+            fi
             git pull origin main
             docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
             docker build -t ${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.sha }} .
             docker push ${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.sha }}
-            kubectl set image deployment/simple-ui-app \
-              simple-ui-app=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.sha }}
-            kubectl rollout status deployment/simple-ui-app
+            if command -v kubectl &> /dev/null; then
+              kubectl set image deployment/simple-ui-app \
+                simple-ui-app=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ github.sha }}
+              kubectl rollout status deployment/simple-ui-app
+            else
+              echo "kubectl not found, skipping Kubernetes deployment"
+            fi
