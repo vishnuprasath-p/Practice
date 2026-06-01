@@ -1,0 +1,36 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Extract last 5 digits of commit SHA
+        id: short_sha
+        run: echo "sha_short=$(echo ${{ github.sha }} | tail -c 6)" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/simple-ui-app:${{ steps.short_sha.outputs.sha_short }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/simple-ui-app:buildcache,mode=max
