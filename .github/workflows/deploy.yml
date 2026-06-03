@@ -4,19 +4,22 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Docker image tag (commit SHA) to deploy'
+        description: 'Docker image tag (commit SHA)'
         required: true
+        type: string
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
 
-      - name: Extract last 5 digits of commit SHA
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Extract Short SHA
         id: short_sha
-        run: echo "sha_short=$(echo ${{ github.event.inputs.image_tag }} | tail -c 6)" >> $GITHUB_OUTPUT
+        run: |
+          echo "sha_short=$(echo '${{ github.event.inputs.image_tag }}' | cut -c1-5)" >> $GITHUB_OUTPUT
 
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1.0.3
@@ -25,19 +28,26 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            if command -v kubectl &> /dev/null; then
-              cd /home/${{ secrets.VM_USER }}/Practice
-              git pull origin main
-              
-              # Replace placeholders in deployment manifest
-              sed -i 's|DOCKER_USERNAME|${{ secrets.DOCKER_USERNAME }}|g' k8s/deployment.yml
-              sed -i 's|BUILD_COMMIT_ID|${{ steps.short_sha.outputs.sha_short }}|g' k8s/deployment.yml
-              
-              # Apply deployment
-              kubectl apply -f k8s/deployment.yml
-              kubectl rollout status deployment/simple-ui-app --timeout=5m
-              echo "Deployment successful with image tag: ${{ steps.short_sha.outputs.sha_short }}"
-            else
-              echo "kubectl not found on the VM"
-              exit 1
+            if [ ! -d ~/Practice ]; then
+              git clone https://github.com/vishnuprasath-p/Practice.git ~/Practice
             fi
+
+            cd ~/Practice
+
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "Current directory:"
+            pwd
+
+            echo "Repository contents:"
+            ls -la
+
+            sed -i "s|DOCKER_USERNAME|${{ secrets.DOCKER_USERNAME }}|g" k8s/deployment.yml
+            sed -i "s|BUILD_COMMIT_ID|${{ steps.short_sha.outputs.sha_short }}|g" k8s/deployment.yml
+
+            kubectl apply -f k8s/deployment.yml
+
+            kubectl rollout status deployment/simple-ui-app --timeout=300s
+
+            echo "Deployment successful with image tag: ${{ steps.short_sha.outputs.sha_short }}"
